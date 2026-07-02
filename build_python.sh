@@ -2,8 +2,8 @@
 
 set -euf -o pipefail
 
-size=5; check=0; install=0
-while getopts 'hcip:' opt
+size=5; check=0; install=0; archs="amd64 arm64";
+while getopts 'hcip:a:' opt
 do
   case "$opt" in
     c)
@@ -15,14 +15,40 @@ do
     p)
       size=$OPTARG
       ;;
+    a)
+      archs=$OPTARG
+      ;;
     *)
-      echo "Usage: $0 [-c] [-i] [-s]"
+      echo "Usage: $0 [-c] [-i] [-p] [-a]"
       echo "  -c: check versions"
       echo "  -i: install and configure asdf"
       echo "  -p: number of parallel builds"
+      echo "  -a: architectures [options: amd64, arm64]"
       exit 1
       ;;
   esac
+done
+
+# Sanitary checks
+if [ ${size} -le 0 ]
+then
+  echo "Number of parallel builds -p should be more than or equal to 1. Current value is ${size}"
+  exit 1
+fi
+
+if [ -z "${archs}" ]
+then
+  echo "-a should not be empty. Accepted values are amd64, arm64 or both"
+  exit 1
+fi
+
+# Check if archs are valid
+VALID_ARCHS=("amd64" "arm64")
+for arch in $archs; do
+  if ! printf '%s\0' "${VALID_ARCHS[@]}" | grep -Fqxz -- "${arch}"; then
+    echo "Not a valid arch value. Accepted values are amd64, arm64 or both"
+    exit 1
+  fi
 done
 
 function build_image() {
@@ -99,37 +125,48 @@ if [ ${#MISSING_VERSIONS_AMD64[@]} -eq 0 ] && [ ${#MISSING_VERSIONS_ARM64[@]} -e
     exit 0
 fi
 
+# Make platforms
+PLATFORMS=()
+for arch in $archs; do
+  PLATFORMS=("${PLATFORMS[@]}" "linux/${arch}")
+done
+PLATFORMS=$(printf "%s," "${PLATFORMS[@]}")
+
 # Make base image
 docker buildx build \
-		--platform=linux/amd64,linux/arm64 \
+		--platform=${PLATFORMS} \
 		-f dockerfiles/python.base.Dockerfile \
 		-t python-base:latest \
 		dockerfiles
 
 # Build Python libs for AMD64
-index=0
-while [[ $index -lt ${#MISSING_VERSIONS_AMD64[@]} ]]; do
-    for version in "${MISSING_VERSIONS_AMD64[@]:$index:$size}"; do
-      echo "Building library for version ${version} and arch amd64"
-      build_image "${version}" "amd64" &
+if [[ $archs =~ "amd64" ]]; then
+    index=0
+    while [[ $index -lt ${#MISSING_VERSIONS_AMD64[@]} ]]; do
+        for version in "${MISSING_VERSIONS_AMD64[@]:$index:$size}"; do
+          echo "Building library for version ${version} and arch amd64"
+          build_image "${version}" "amd64" &
+        done
+
+        # Wait for all processes to finish before moving on to next chunk
+        wait
+
+        index=$((index + size))
     done
-
-    # Wait for all processes to finish before moving on to next chunk
-    wait
-
-    index=$((index + size))
-done
+fi
 
 # Build Python libs foor ARM64
-index=0
-while [[ $index -lt ${#MISSING_VERSIONS_ARM64[@]} ]]; do
-    for version in "${MISSING_VERSIONS_ARM64[@]:$index:$size}"; do
-      echo "Building library for version ${version} and arch arm64"
-      build_image "${version}" "arm64" &
+if [[ $archs =~ "arm64" ]]; then
+    index=0
+    while [[ $index -lt ${#MISSING_VERSIONS_ARM64[@]} ]]; do
+        for version in "${MISSING_VERSIONS_ARM64[@]:$index:$size}"; do
+          echo "Building library for version ${version} and arch arm64"
+          build_image "${version}" "arm64" &
+        done
+
+        # Wait for all processes to finish before moving on to next chunk
+        wait
+
+        index=$((index + size))
     done
-
-    # Wait for all processes to finish before moving on to next chunk
-    wait
-
-    index=$((index + size))
-done
+fi
