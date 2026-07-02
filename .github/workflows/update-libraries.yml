@@ -1,4 +1,4 @@
-name: Update Python Offsets
+name: Update Libraries
 
 on:
   schedule:
@@ -10,7 +10,7 @@ permissions:
   id-token: write
 
 jobs:
-  update-python-offsets:
+  update-libraries:
     runs-on: ubuntu-latest
     steps:
       - name: Setup tmate session
@@ -38,20 +38,20 @@ jobs:
         uses: docker/setup-qemu-action@v4
 
       - name: Check and build Python libraries
-        run: ./build_python.sh -i
+        run: ./build_python.sh -i -p 4
 
       - name: Check and build MUSL libraries
-        run: ./build_musl.sh
+        run: ./build_musl.sh -p 4
 
       - name: Check and build glibc libraries
-        run: bash -x ./build_glibc.sh -a amd64
+        run: bash -x ./build_glibc.sh -p 2 -a amd64
 
       - name: Verify Changed files
         id: verify-changed-files
         run: |
           git status --short
           # If there are new files exit code will be 0 and 1 if there are no new files
-          if git status --short | egrep -e 'A(.*)$' > /dev/null; then
+          if git status --short | egrep -e '^\?(.*)$' > /dev/null; then
               echo "files_changed=true" >> $GITHUB_OUTPUT
           else
               echo "files_changed=false" >> $GITHUB_OUTPUT
