@@ -48,6 +48,12 @@ for arch in $archs; do
   fi
 done
 
+function join() {
+  local IFS="$1"
+  shift
+  echo "$*"
+}
+
 function build_image() {
     local version=$1
     local arch=$2
@@ -107,7 +113,7 @@ PLATFORMS=()
 for arch in $archs; do
   PLATFORMS=("${PLATFORMS[@]}" "linux/${arch}")
 done
-PLATFORMS=$(printf "%s," "${PLATFORMS[@]}")
+PLATFORMS=$(join , "${PLATFORMS[@]}")
 
 # Make base image
 docker buildx build \
