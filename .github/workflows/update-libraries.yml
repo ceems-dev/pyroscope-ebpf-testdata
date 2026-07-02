@@ -1,4 +1,4 @@
-name: Update Python Offsets
+name: Update Libraries
 
 on:
   schedule:
@@ -6,20 +6,13 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  id-token: write
+  contents: write
 
 jobs:
-  update-python-offsets:
+  update-libraries:
     runs-on: ubuntu-latest
     steps:
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
-        with:
-          limit-access-to-actor: true
-          detached: true
-
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@v7
         with:
           persist-credentials: 'false'
 
@@ -38,20 +31,20 @@ jobs:
         uses: docker/setup-qemu-action@v4
 
       - name: Check and build Python libraries
-        run: ./build_python.sh -i
+        run: ./build_python.sh -i -p 4
 
       - name: Check and build MUSL libraries
-        run: ./build_musl.sh
+        run: ./build_musl.sh -p 4
 
       - name: Check and build glibc libraries
-        run: bash -x ./build_glibc.sh -a amd64
+        run: bash -x ./build_glibc.sh -p 2
 
       - name: Verify Changed files
         id: verify-changed-files
         run: |
           git status --short
           # If there are new files exit code will be 0 and 1 if there are no new files
-          if git status --short | egrep -e 'A(.*)$' > /dev/null; then
+          if git status --short | egrep -e '^\?(.*)$' > /dev/null; then
               echo "files_changed=true" >> $GITHUB_OUTPUT
           else
               echo "files_changed=false" >> $GITHUB_OUTPUT
@@ -70,3 +63,4 @@ jobs:
         uses: ad-m/github-push-action@master
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ github.head_ref }}
