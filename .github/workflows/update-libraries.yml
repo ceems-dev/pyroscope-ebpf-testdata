@@ -60,7 +60,39 @@ jobs:
 
       - name: Push changes
         if: steps.verify-changed-files.outputs.files_changed == 'true'
+        id: push
         uses: ad-m/github-push-action@master
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           branch: ${{ github.head_ref }}
+
+      - name: Discord notification
+        if: steps.verify-changed-files.outputs.files_changed == 'true' || failure()
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ "${{ steps.push.outcome }}" == "success" ]; then
+            COLOR=5763719
+            STATUS="Success"
+            EMOJI=":white_check_mark:"
+          else
+            COLOR=15548997
+            STATUS="Failed"
+            EMOJI=":x:"
+          fi
+          
+          curl -H "Content-Type: application/json" \
+               -d "{
+                 \"embeds\": [{
+                   \"title\": \"$EMOJI Update Libraries Scheduled Pipeline - $STATUS\",
+                   \"description\": \"Updating MUSL/GLIBC/Python libraries for ebpf package in \`${{ github.repository }}\`\",
+                   \"color\": $COLOR,
+                   \"fields\": [
+                     {\"name\": \"Branch\", \"value\": \"\`${{ github.ref_name }}\`\", \"inline\": true},
+                     {\"name\": \"Commit\", \"value\": \"\`${{ github.sha }}\`\", \"inline\": true},
+                     {\"name\": \"Author\", \"value\": \"${{ github.actor }}\", \"inline\": true}
+                   ],
+                   \"url\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"
+                 }]
+               }" \
+               $DISCORD_WEBHOOK
